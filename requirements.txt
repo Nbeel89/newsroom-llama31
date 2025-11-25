@@ -1,0 +1,13 @@
+flask
+transformers
+accelerate
+bitsandbytes
+peft
+sentencepiece
+pyyaml
+datasets
+tqdm
+beautifulsoup4
+requests
+lxml
+spacy

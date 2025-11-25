@@ -1,0 +1,6 @@
+model_id: "meta-llama/Meta-Llama-3.1-8B-Instruct"
+
+load_4bit: false   # 👈 turn OFF 4-bit for now
+max_ctx: 2048
+default_mode: "B"
+device_map: "auto"

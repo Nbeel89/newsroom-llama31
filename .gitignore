@@ -1,0 +1,23 @@
+# Python environment
+venv/
+.env
+
+# Model weights
+models/
+*.bin
+*.pt
+*.safetensors
+
+# Training outputs (keep ignore)
+outputs/
+run_log/
+
+# Raw scraped data (too large)
+data/raw/
+
+# Cache
+__pycache__/
+*.pyc
+
+# VS Code
+.vscode/
