@@ -28,12 +28,67 @@ def load_config(config_path: str):
 
 
 def build_training_text(example):
-    """Combine instruction, input, output into a single text for causal LM."""
+    """
+    Build a single 'text' field for SFT.
+
+    Supports two schemas:
+    1) Old:  instruction / input / output
+    2) New:  mode / article / output   (our v2 dataset)
+    """
+
+    if "instruction" in example:
+        # OLD SCHEMA: keep backward compatible
+        instruction = example["instruction"]
+        inp = example.get("input", "")
+    else:
+        # NEW SCHEMA: use mode + article to build the instruction
+        mode = (example.get("mode") or "A").upper()
+        article = example.get("article", "")
+
+        if mode == "A":
+            instruction = (
+                "Write ONE concise paragraph that summarises the ARTICLE in a "
+                "neutral news tone. Maximum 3 sentences. Do NOT add any "
+                "information that is not in the ARTICLE."
+            )
+        elif mode == "B":
+            instruction = (
+                "Produce a HEADLINE and a LEDE based ONLY on the ARTICLE.\n\n"
+                "FORMAT:\n"
+                "HEADLINE: <headline in sentence case, no more than 14 words>\n"
+                "LEDE: <one sentence, no more than 40 words>\n"
+                "Do NOT add numbers, dates or quotes that are not explicitly "
+                "mentioned in the ARTICLE."
+            )
+        elif mode == "C":
+            instruction = (
+                "Produce a HEADLINE, a LEDE and exactly three factual bullets "
+                "based ONLY on the ARTICLE.\n\n"
+                "FORMAT:\n"
+                "HEADLINE: <headline in sentence case, no more than 14 words>\n"
+                "LEDE: <one sentence, no more than 40 words>\n"
+                "BULLETS:\n"
+                "- <fact 1>\n"
+                "- <fact 2>\n"
+                "- <fact 3>\n"
+                "Each bullet must state a single fact from the ARTICLE. "
+                "Do NOT invent new details."
+            )
+        else:
+            instruction = (
+                "Summarise the ARTICLE in a single paragraph using only the "
+                "facts provided, in a neutral news tone."
+            )
+
+        inp = article
+
+    out = example["output"]
+
     return {
         "text": (
-            f"### Instruction:\n{example['instruction']}\n\n"
-            f"### Input:\n{example['input']}\n\n"
-            f"### Output:\n{example['output']}\n"
+            f"### Instruction:\n{instruction}\n\n"
+            f"### Input:\n{inp}\n\n"
+            f"### Output:\n{out}"
         )
     }
 
@@ -88,7 +143,7 @@ def main():
             device_map=None,
         )
 
-    # No gradient checkpointing here
+    # Disable cache for training
     model.config.use_cache = False
 
     # ---------------- LoRA ----------------
@@ -113,10 +168,12 @@ def main():
     ds_with_text = raw_ds["train"].map(build_training_text)
 
     def tokenize_fn(example):
+        # Pad & truncate to fixed length so the data collator can batch safely
         enc = tokenizer(
             example["text"],
             truncation=True,
             max_length=max_seq_length,
+            padding="max_length",
         )
         # labels = input_ids (standard causal LM fine-tuning)
         enc["labels"] = enc["input_ids"].copy()

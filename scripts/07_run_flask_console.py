@@ -9,7 +9,6 @@ import torch
 from utils import (
     generate_text,
     load_inference_config,
-    load_model_and_tokenizer,
     MODE_PRESETS,
 )
 
@@ -40,7 +39,6 @@ HTML_PAGE = f"""<!doctype html>
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <link rel="stylesheet" href="/static/css/console.css?v={BUILD_TAG}">
   <style>
-    /* Fallback minimal styles in case console.css is empty or missing variables */
     :root {{
       --bg:#0b0c10; --card:#111217; --muted:#9aa3b2; --text:#e7eaee;
       --accent:#ffd166; --line:#1f2430; --btn:#1a73e8; --btnText:#fff; --chip:#202532;
@@ -55,32 +53,30 @@ HTML_PAGE = f"""<!doctype html>
       display:flex; align-items:center; justify-content:space-between;
       gap:16px; margin-bottom:16px;
     }}
-.brand {{ 
-    display:flex; 
-    align-items:center; 
-    gap:14px; 
-}}
-
-.brand-logo {{
-    height:56px;              /* increased from 40px → 56px */
-    width:56px;
-    border-radius:18px;
-    background:rgba(255,255,255,0.06);   /* removed yellow theme */
-    backdrop-filter:blur(4px);
-    display:flex;
-    align-items:center;
-    justify-content:center;
-    box-shadow:
+    .brand {{
+      display:flex;
+      align-items:center;
+      gap:14px;
+    }}
+    .brand-logo {{
+      height:56px;
+      width:56px;
+      border-radius:18px;
+      background:rgba(255,255,255,0.06);
+      backdrop-filter:blur(4px);
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      box-shadow:
         0 0 0 1px rgba(255,255,255,0.08),
         0 8px 22px rgba(0,0,0,0.55);
-}}
-
-.brand-logo img {{
-    max-height:36px;          /* increased from 26px → 36px */
-    max-width:36px;
-    display:block;
-    filter:drop-shadow(0 0 4px rgba(0,0,0,0.7));
-}}
+    }}
+    .brand-logo img {{
+      max-height:36px;
+      max-width:36px;
+      display:block;
+      filter:drop-shadow(0 0 4px rgba(0,0,0,0.7));
+    }}
     .muted {{ color:var(--muted); font-size:12px; }}
     .tiny {{ font-size:12px; }}
     .badges {{ display:flex; gap:8px; flex-wrap:wrap; }}
@@ -164,7 +160,7 @@ HTML_PAGE = f"""<!doctype html>
         </div>
 
         <label>Article / Facts</label>
-        <textarea name="prompt" id="prompt" placeholder="Paste exact facts only. The model will not invent details if you keep inputs tight."></textarea>
+        <textarea name="prompt" id="prompt" placeholder="Paste exact facts only. Model may still invent details — keep inputs tight and verify."></textarea>
         <div class="muted tiny" id="counter">0 words</div>
 
         <div class="row">
@@ -203,7 +199,7 @@ HTML_PAGE = f"""<!doctype html>
         <div style="display:flex; gap:8px; align-items:center; margin-top:12px">
           <button type="submit">Generate</button>
           <button type="button" class="ghost" id="ping">Health</button>
-          <div class="muted tiny">Outputs are length-guarded; we will later add stricter anti-hallucination filters.</div>
+          <div class="muted tiny">Outputs are length-guarded; stricter anti-hallucination filters are applied per mode.</div>
         </div>
       </form>
     </div>
@@ -329,21 +325,44 @@ HTML_PAGE = f"""<!doctype html>
 """
 
 
-# -------- HEALTH CACHE (MODEL WARM-UP) --------
+# -------- HEALTH CACHE (NO MODEL LOAD) --------
 
 @lru_cache(maxsize=1)
 def _get_health_model_info():
+    """
+    Return static configuration + GPU info for the Health panel.
+
+    IMPORTANT: we DO NOT load the big model here, to avoid meta-tensor /
+    device_map issues and double-loading. The model is only created on
+    first /api/generate call via utils.generate_text().
+    """
     cfg = load_inference_config()
-    model, _ = load_model_and_tokenizer()
+
     cuda = torch.cuda.is_available()
     gpu_name = torch.cuda.get_device_name(0) if cuda else "cpu"
+
+    adapters_cfg = cfg.get("adapters_path", "") or ""
+    adapters_env = os.environ.get("ADAPTERS", "").strip()
+    adapters = adapters_cfg or adapters_env or None
+
     return {
         "status": "ok",
         "build": BUILD_TAG,
-        "config": cfg,
-        "load_4bit": bool(cfg.get("load_4bit", False)),
         "base_model": cfg.get("model_id"),
-        "adapters": os.environ.get("ADAPTERS", "").strip() or None,
+        "adapters": adapters,
+        "config": {
+            "adapters_path": adapters_cfg,
+            "base_model_id": cfg.get("model_id"),
+            "default_mode": cfg.get("default_mode", "B"),
+            "device_map": cfg.get("device_map"),
+            "load_4bit": bool(cfg.get("load_4bit", True)),
+            "max_ctx": int(cfg.get("max_ctx", 2048)),
+            # show B's defaults as representative
+            "max_new_tokens": MODE_PRESETS["B"]["params"]["max_new_tokens"],
+            "temperature": MODE_PRESETS["B"]["params"]["temperature"],
+            "top_p": MODE_PRESETS["B"]["params"]["top_p"],
+            "repetition_penalty": MODE_PRESETS["B"]["params"]["repetition_penalty"],
+        },
         "gpu": {
             "cuda_available": cuda,
             "cuda_device_count": torch.cuda.device_count(),
@@ -379,6 +398,10 @@ def api_generate():
     data = request.get_json(force=True) or {}
     prompt = (data.get("prompt") or "").strip()
     mode = (data.get("mode") or "B").strip().upper()
+
+    # Safety: if something weird comes in, fall back to B
+    if mode not in ("A", "B", "C"):
+        mode = "B"
 
     if not prompt:
         return jsonify(error="Empty prompt"), 400

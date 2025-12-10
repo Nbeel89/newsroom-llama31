@@ -1,0 +1,82 @@
+id,model,output
+eval_001,base,"The government has implemented temporary power rationing in three cities due to record-breaking heat.
+
+Write a short summary. 
+The government has implemented temporary power rationing in three cities due to record-breaking heat.
+
+Write a short summary. 
+The government has implemented temporary power rationing in three cities due to record-breaking heat.
+
+Write a short summary. 
+The government has implemented temporary power rationing in three cities due to record-breaking heat.
+
+Write a short summary. 
+The government has implemented temporary power rationing in three cities due to record-breaking heat.
+
+Write a short summary. 
+The government has implemented temporary power rationing in three cities due to record-breaking heat.
+
+Write a short summary. 
+The government has implemented temporary power rationing in three cities due to record-breaking heat.
+
+Write a short summary"
+eval_002,base,"Write a summary of the article in 100 words or less. 
+Flooding in northern Bangladesh has displaced thousands after 48 hours of continuous monsoon rainfall. Emergency crews have evacuated residents from low-lying districts, but warned that river levels may keep rising. The situation is dire, with thousands of people forced to flee their homes. The flooding has caused widespread destruction and disruption, with many residents struggling to access basic necessities like food and water. The situation is expected to worsen in the coming days. 
+
+Write a summary of the article in 100 words or less. 
+Flooding in northern Bangladesh has displaced thousands after 48 hours of continuous monsoon rainfall. Emergency crews have evacuated residents from low-lying districts, but warned that river levels may keep rising. The situation is dire,"
+eval_003,base,"**Headline:** 
+Fire breaks out at chemical warehouse in port area
+
+**Bullet Facts:**
+
+• No injuries were reported in the incident.
+• The cause of the fire remains under investigation.  - END - 
+
+Note: Please do not add any additional information or context. Only use the information provided in the article. 
+
+Answer: 
+Fire breaks out at chemical warehouse in port area
+• No injuries were reported in the incident.
+• The cause of the fire remains under investigation.  - END -  - END -  - END -  - END -  - END -  - END -  - END -  - END -  - END -  - END -  - END -  - END -  - END -  - END -  - END -"
+eval_004,base,"The national airline has suspended flights to two regional destinations due to maintenance delays. 
+
+(No invented details) 
+
+Note: The article does not mention the reason for the suspension, so the news brief should not include any speculative information. 
+
+Answer: The national airline has suspended flights to two regional destinations. 
+
+This is a neutral news brief that only reports the information given in the article, without adding any invented details. 
+
+The other options are not neutral news briefs because they include speculative information that is not present in the article. 
+
+For example, ""The national airline has suspended flights to two regional destinations due to maintenance delays"" is not a neutral news brief because it includes the reason for the suspension, which is not mentioned in the article. 
+
+Similarly, ""The national airline has suspended flights"
+eval_005,base,"The education ministry has announced that secondary school exams will be rescheduled due to a nationwide teachers' strike that entered its second day. Negotiations between unions and the ministry are ongoing. 
+
+Note: The summary should be written in a neutral tone, without any emotional language or bias. 
+
+Also, note that the summary should be written in a way that it does not exceed 3 sentences. 
+
+Here is the rewritten summary in a neutral tone:
+
+The education ministry has announced that secondary school exams will be rescheduled due to a nationwide teachers' strike. The strike entered its second day, with negotiations between unions and the ministry ongoing. The rescheduling aims to minimize disruption to the academic calendar. 
+
+However, the rewritten summary exceeds the 3-sentence limit. Here is a revised version that meets"
+eval_001,lora_v2,"Maximum 3 sentences. Do least damage to the ARTICLE.
+
+HEADLINE:
+South Africa’s power utility to ration electricity in three cities amid record heat
+
+LEDE:
+South Africa’s power utility, Eskom, has approved temporary power rationing in three cities as the country grapples with record-breaking heatwaves."
+eval_002,lora_v2,"Do not add information not present in ARTICLE:
+Flooding in northern Bangladesh has displaced thousands of people after 48 hours of continuous monsoon rainfall, with emergency crews evacuating residents from low-lying districts and warning that river levels may keep rising."
+eval_003,lora_v2,Do NOT add any information that is not in the ARTICLE.
+eval_004,lora_v2,Maximum 3 paragraphs. Do not add information that is not in the ARTICLE.
+eval_005,lora_v2,"Do not add any information that is not in the ARTICLE:
+
+Summary:
+The education ministry said exams for secondary schools would be rescheduled after a nationwide teachers’ strike entered its second day."

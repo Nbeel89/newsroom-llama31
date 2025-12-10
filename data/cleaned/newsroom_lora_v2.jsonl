@@ -1,0 +1,35 @@
+{"id": "aj_v2_001_A", "mode": "A",
+ "article": "Officials have approved temporary power rationing in three cities after a heatwave pushed electricity demand to record highs. Hospitals and water utilities will be exempt from the cuts.",
+ "output": "Officials have imposed temporary power rationing in three cities after a heatwave pushed electricity demand to record levels, while hospitals and water utilities are exempt from the cuts."}
+
+{"id": "aj_v2_002_A", "mode": "A",
+ "article": "Rescue teams in the coastal city of Port Avalon are searching for survivors after a residential building collapsed during heavy overnight rains, killing at least eight people and injuring dozens more.",
+ "output": "Rescue teams in the coastal city of Port Avalon are searching for survivors after a residential building collapsed during heavy overnight rains, killing at least eight people and injuring at least eight and injuring dozens more."}
+
+{"id": "aj_v2_003_A", "mode": "A",
+ "article": "Teachers across the state have launched a 24-hour strike over pay and classroom sizes, forcing hundreds of public schools to close while talks with the government remain stalled.",
+ "output": "Teachers across the state have begun a 24-hour strike over pay and classroom sizes, forcing hundreds of public schools to close while negotiations with the government remain stalled."}
+
+{"id": "aj_v2_004_B", "mode": "B",
+ "article": "Argentina’s bonds, stocks and currency are rising after President Javier Milei’s party won a sweeping victory in Sunday’s midterm election, seen as key to keeping his economic reforms on track.",
+ "output": "HEADLINE: Argentina’s markets rally after Milei’s midterm win\nLEDE: Argentina’s bonds, stocks and currency are climbing after President Javier Milei’s party scored a sweeping midterm election victory seen as crucial for keeping his economic reform agenda on track."}
+
+{"id": "aj_v2_005_B", "mode": "B",
+ "article": "Voters in the capital have backed a referendum to restrict short-term holiday rentals, capping the number of nights properties can be rented each year in an effort to ease a housing shortage.",
+ "output": "HEADLINE: Capital backs curbs on short-term rentals\nLEDE: Voters in the capital have approved a referendum to cap how many nights homes can be rented to tourists each year, in a bid to ease a worsening housing shortage."}
+
+{"id": "aj_v2_006_B", "mode": "B",
+ "article": "A powerful snowstorm has cut power to thousands of homes and disrupted flights across the country’s northeast, with authorities warning of further travel delays as strong winds continue.",
+ "output": "HEADLINE: Snowstorm cuts power and disrupts travel in northeast\nLEDE: A powerful snowstorm has knocked out electricity to thousands of homes and disrupted flights across the country’s northeast, with authorities warning that strong winds could cause further travel delays."}
+
+{"id": "aj_v2_007_C", "mode": "C",
+ "article": "Islamabad’s police chief says a suicide bomber detonated explosives near the entrance of the city’s district court complex, killing at least 12 people and wounding dozens more.",
+ "output": "HEADLINE: Suicide bombing near Islamabad court kills at least 12\nLEDE: A suicide bomber has detonated explosives near the entrance of Islamabad’s district court complex, killing at least 12 people and wounding dozens more, according to the city’s police chief.\nBULLETS:\n- Blast struck near the entrance of the district court complex in Islamabad.\n- Police say at least 12 people were killed and dozens more were wounded.\n- Authorities have cordoned off the area and launched an investigation."}
+
+{"id": "aj_v2_008_C", "mode": "C",
+ "article": "Health officials say a measles outbreak has been detected in three provinces, with schools urged to check vaccination records and families encouraged to bring unvaccinated children to local clinics.",
+ "output": "HEADLINE: Measles outbreak detected in three provinces\nLEDE: Health officials say a measles outbreak has been detected in three provinces, urging schools to review vaccination records and families to bring unvaccinated children to local clinics.\nBULLETS:\n- Measles cases reported in three provinces, health officials say.\n- Schools asked to review students’ vaccination records.\n- Families urged to take unvaccinated children to local clinics."}
+
+{"id": "aj_v2_009_C", "mode": "C",
+ "article": "A new report warns that twenty-eight large fossil fuel projects planned worldwide could together emit more carbon dioxide than the remaining global budget for limiting warming to 1.5 degrees Celsius.",
+ "output": "HEADLINE: Report warns over twenty-eight major fossil fuel projects\nLEDE: A new report warns that twenty-eight large fossil fuel projects planned around the world could together emit more carbon dioxide than the remaining global budget for limiting warming to 1.5 degrees Celsius.\nBULLETS:\n- Report tracks twenty-eight planned large oil, gas and coal projects worldwide.\n- Combined emissions could exceed the remaining carbon budget for limiting warming to 1.5C.\n- Authors say governments and investors should halt approvals for the projects."}

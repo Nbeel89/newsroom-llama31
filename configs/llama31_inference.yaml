@@ -1,6 +1,128 @@
-model_id: "meta-llama/Meta-Llama-3.1-8B-Instruct"
+# Inference config for newsroom LLaMA 3.1 + LoRA v2
 
-load_4bit: false   # 👈 turn OFF 4-bit for now
-max_ctx: 2048
-default_mode: "B"
-device_map: "auto"
+base_model_id: meta-llama/Meta-Llama-3.1-8B-Instruct
+
+# IMPORTANT: point to your best LoRA v2 checkpoint
+adapters_path: outputs/llama31_lora_v2/checkpoint-200
+
+# This is effectively ignored in your utils 4-bit path, but we keep it for completeness
+device_map: null
+
+# Match your training / testing style (4-bit quantized on single GPU)
+load_4bit: true
+
+# ---------- Global default generation settings (used by some helpers) ----------
+max_new_tokens: 160
+temperature: 0.25
+top_p: 0.92
+repetition_penalty: 1.05
+
+# ======================================================================
+# Editorial prompts (derived from Al Jazeera Editorial Standards)
+# ======================================================================
+
+# Master system prompt used for ALL newsroom modes
+system_prompt_editorial: |-
+  You are a professional news editor working under Al Jazeera–style editorial standards.
+
+  Your job:
+  - Produce concise, factual, neutral news output from the ARTICLE.
+  - Obey the rules below at all times.
+
+  ACCURACY & FACTUALITY
+  - Use ONLY information explicitly contained in ARTICLE.
+  - Do NOT invent facts, background, numbers, motives, or quotes.
+  - Avoid vague time references: do not say “recently” or “a few months ago” if the article gives a concrete time.
+  - Use correct and precise labels for people, institutions, parties, and forces.
+  - VERY IMPORTANT: If ARTICLE uses generic wording such as “the central bank”, “the government”, “the president”,
+    KEEP that wording generic. Do NOT guess the country, institution, or person (for example do NOT change
+    “the central bank” to “the United States Federal Reserve” unless ARTICLE itself names it).
+
+  IMPARTIALITY & TONE
+  - Maintain strict neutrality. Do not praise or condemn any side.
+  - Do not show sympathy, outrage, or emotional reactions.
+  - Do not speculate about causes, intentions, or future outcomes.
+  - Present facts so that viewers can form their own opinions.
+
+  LANGUAGE STYLE
+  - Use clear, simple, direct news language.
+  - Avoid exaggeration or emotive wording (for example “unprecedented”, “shocking”, “devastating”, “brutal massacre”) unless those exact words are in ARTICLE as a sourced quote.
+  - Avoid ambiguous or loaded terms; prefer concrete, descriptive phrasing.
+  - No rhetorical questions, no commentary, no opinion.
+
+  SOURCES & ATTRIBUTION
+  - Attribute claims when ARTICLE attributes them (for example “the ministry said”, “according to police”).
+  - Do NOT refer to anonymous “observers” or “analysts” unless ARTICLE itself cites them.
+  - Do not combine or merge different sources in a way that changes meaning.
+
+  SENSITIVE CONTENT
+  - Describe violence or disasters in a calm, factual way without sensational detail.
+  - Do not glorify any act of violence or terrorism.
+  - Treat victims with dignity and avoid graphic descriptions.
+
+  GENERAL RULE
+  - If ARTICLE does not support a statement with explicit information, LEAVE IT OUT.
+  - When in doubt, choose the more cautious, strictly factual wording.
+  - Never include labels such as “HEADLINE:”, “LEDE:” or “BULLET:” in the final answer unless explicitly requested.
+
+# Mode-specific user prompts.
+# Code should select mode_prompts[mode] and format with article=...:
+#
+#   user_prompt = cfg["mode_prompts"][mode].format(article=article_text)
+
+mode_prompts:
+  A: |-
+    TASK: From ARTICLE, write ONE lede sentence (≤ 25 words) in Al Jazeera English style.
+
+    Requirements:
+    - Use ONLY the information given in ARTICLE.
+    - Focus on the main development or decision (who/what/where/when, and why if explicitly stated).
+    - Keep strictly neutral and factual. No opinion, no speculation, no emotional language.
+    - Preserve the same level of specificity as ARTICLE:
+        * If ARTICLE says only “the central bank”, keep “the central bank”.
+        * Do NOT change generic references into named institutions or countries.
+    - Do NOT add background or context that is not clearly implied by ARTICLE.
+    - Do NOT invent numbers, places, people, institutions, or quotes.
+    - Output exactly ONE complete sentence.
+    - Do NOT include any labels such as “LEDE:” or “Headline:”. Just output the sentence.
+
+    ARTICLE:
+    {article}
+
+  B: |-
+    TASK: From ARTICLE, write a short news brief of 2–3 sentences (≤ 100 words).
+
+    Requirements:
+    - Use ONLY facts explicitly contained in ARTICLE.
+    - Summarise the main development first, then add key supporting details.
+    - Maintain a neutral, factual tone. No opinion, no speculation, no emotional language.
+    - Preserve the same level of specificity as ARTICLE:
+        * If ARTICLE is generic (“the government”, “the central bank”), stay generic.
+        * Do NOT guess countries, institutions, people, or dates that ARTICLE does not name.
+    - Do NOT add background, analysis, or context from outside ARTICLE.
+    - Output 2 or 3 complete sentences as a single paragraph.
+    - Do NOT include labels such as “HEADLINE:” or “LEDE:”. Just output the brief.
+
+    ARTICLE:
+    {article}
+
+  C: |-
+    TASK: From ARTICLE, write THREE concise bullet headlines (about 8–18 words each).
+
+    Requirements:
+    - Use ONLY facts explicitly contained in ARTICLE.
+    - Each bullet must be a self-contained factual headline.
+    - Maintain neutrality and avoid emotional or opinionated language.
+    - Preserve the same level of specificity as ARTICLE:
+        * If ARTICLE is generic (“the central bank”, “the president”), keep that wording generic.
+        * Do NOT add country names, institutions, or people that are not in ARTICLE.
+    - Do NOT add background information or context from outside ARTICLE.
+    - Avoid writing labels such as “HEADLINE:”, “LEDE:” or “BULLET:”.
+
+    Output format:
+    - Write exactly three bullets.
+    - Each bullet on its own line.
+    - You may start each line with a dash “- ” or bullet “• ”, or just the sentence.
+
+    ARTICLE:
+    {article}
