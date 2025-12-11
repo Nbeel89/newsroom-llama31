@@ -1,5 +1,5 @@
-import os
 import re
+import os
 import pathlib
 from functools import lru_cache
 from typing import Tuple, Dict, Any, Optional
@@ -20,50 +20,52 @@ DEFAULT_CONFIG_PATH = pathlib.Path("configs/llama31_inference.yaml")
 
 def load_inference_config(path: Optional[str] = None) -> Dict[str, Any]:
     """
-    Load YAML config for inference and provide sane defaults.
+    Load YAML config for inference. Falls back to sane defaults if file missing.
 
-    Supports both:
-      - model_id
-      - base_model_id   (as in your current YAML)
+    YAML can define:
+      - base_model_id: huggingface model name
+      - adapters_path: LoRA checkpoint directory
+      - load_4bit: true/false
+      - max_ctx: context window
+      - system_prompt_editorial: master system prompt
+      - mode_prompts: {A: "...{article}...", B: "...", C: "..."}
     """
     cfg_path = pathlib.Path(path or DEFAULT_CONFIG_PATH)
-
     if cfg_path.is_file():
         with cfg_path.open("r", encoding="utf-8") as f:
             data = yaml.safe_load(f) or {}
     else:
         data = {}
 
-    # Base model id (prefer explicit key if present).
-    model_id = (
-        data.get("model_id")
-        or data.get("base_model_id")
-        or "meta-llama/Meta-Llama-3.1-8B-Instruct"
+    # Support either `base_model_id` or `model_id` in YAML, but prefer explicit.
+    base_model_id = data.get("base_model_id") or data.get(
+        "model_id", "meta-llama/Meta-Llama-3.1-8B-Instruct"
     )
+    data["model_id"] = base_model_id
 
-    data["model_id"] = model_id
-
-    # Quantization / device defaults.
+    # Defaults (only used if YAML does not define them)
     data.setdefault("load_4bit", True)
-    data.setdefault("device_map", "auto")
-
-    # Context length and default mode.
     data.setdefault("max_ctx", 2048)
+    data.setdefault("device_map", "auto")
     data.setdefault("default_mode", "B")
-
-    # LoRA adapter path (fine-tuned weights).
+    # Default LoRA adapter directory (your fine-tuned weights)
     data.setdefault("adapters_path", "outputs/llama31_lora_v2/checkpoint-200")
 
     return data
 
 
 # ============================================================
-# MODE PRESETS (UI + decoding params)
+# MODE PRESETS (fallbacks if YAML prompts not present)
 # ============================================================
 
 MODE_PRESETS: Dict[str, Dict[str, Any]] = {
     "A": {
         "label": "A — One-sentence lede (≤20 words)",
+        "sys": (
+            "You are a neutral news editor. "
+            "Write one concise sentence (maximum 20 words) based strictly on the ARTICLE. "
+            "Do not add any facts that are not explicitly stated in the ARTICLE."
+        ),
         "params": {
             "max_new_tokens": 28,
             "temperature": 0.2,
@@ -74,6 +76,12 @@ MODE_PRESETS: Dict[str, Dict[str, Any]] = {
     },
     "B": {
         "label": "B — Short news brief (2–3 sentences, ≤80 words)",
+        "sys": (
+            "You are a newsroom writer. "
+            "Write a neutral 2–3 sentence news brief (maximum 80 words) "
+            "based only on what the user writes. "
+            "Do not invent extra facts, names, locations, dates or numbers."
+        ),
         "params": {
             "max_new_tokens": 100,
             "temperature": 0.25,
@@ -84,6 +92,12 @@ MODE_PRESETS: Dict[str, Dict[str, Any]] = {
     },
     "C": {
         "label": "C — 3 bullet headlines (5–9 words each)",
+        "sys": (
+            "You are a neutral news editor. "
+            "From the ARTICLE, write three different concise bullet headlines, "
+            "each 5–9 words. Use only facts from the ARTICLE. "
+            "Do not repeat the same wording across bullets and do not add new facts."
+        ),
         "params": {
             "max_new_tokens": 48,
             "temperature": 0.2,
@@ -104,14 +118,14 @@ def load_model_and_tokenizer(
     config_path: Optional[str] = None,
 ) -> Tuple[AutoModelForCausalLM, AutoTokenizer]:
     """
-    Load LLaMA 3.1 8B with optional 4-bit quantization and LoRA adapters.
-
-    Cached so we only load once per process.
+    Load LLaMA 3.1 8B with optional 4-bit + LoRA.
+    Cached so it only loads once per process.
     """
     cfg = load_inference_config(config_path)
     model_id = cfg["model_id"]
     load_4bit = bool(cfg.get("load_4bit", True))
 
+    # Prefer adapters_path from config; fall back to ADAPTERS env var if set.
     adapters_cfg = cfg.get("adapters_path", "")
     adapters_env = os.environ.get("ADAPTERS", "").strip()
 
@@ -122,7 +136,8 @@ def load_model_and_tokenizer(
         adapters_path = pathlib.Path(adapters_env)
 
     print(
-        f"[boot] loading {model_id} (4bit={load_4bit}) adapters={adapters_path}"
+        f"[boot] loading {model_id} "
+        f"(4bit={load_4bit}) adapters={adapters_path}"
     )
 
     tok = AutoTokenizer.from_pretrained(model_id, use_fast=True)
@@ -133,7 +148,6 @@ def load_model_and_tokenizer(
     use_cuda = torch.cuda.is_available()
     device = torch.device("cuda" if use_cuda else "cpu")
 
-    # Base model load
     if use_cuda and load_4bit:
         print("[boot] loading base model in 4-bit on CUDA")
         base = AutoModelForCausalLM.from_pretrained(
@@ -165,7 +179,7 @@ def load_model_and_tokenizer(
 
 
 # ============================================================
-# CHAT / RAW INPUT BUILDING
+# PROMPT BUILDERS
 # ============================================================
 
 def _build_chat_ids(
@@ -178,50 +192,32 @@ def _build_chat_ids(
 ) -> Tuple[torch.Tensor, torch.Tensor, int]:
     """
     Build chat-style input IDs using the model's chat template.
-
-    If YAML contains:
-      - system_prompt_editorial
-      - mode_prompts[mode]
-
-    we use those. Otherwise we just use the ARTICLE as a plain user prompt.
+    Uses YAML editorial prompts if present, otherwise falls back to MODE_PRESETS.
     """
-    mode_key = (mode or "B").upper()
+    mode_key = (mode or "A").upper()
     article = (user_text or "").strip()
 
-    sys_prompt: str = ""
+    sys_prompt: Optional[str] = None
     user_content: str = article
 
-    if cfg is None:
-        cfg = {}
+    if cfg is not None:
+        editorial_sys = (cfg.get("system_prompt_editorial") or "").strip()
+        mode_prompts = cfg.get("mode_prompts") or {}
+        tpl = mode_prompts.get(mode_key)
 
-    editorial_sys = (cfg.get("system_prompt_editorial") or "").strip()
-    mode_prompts = cfg.get("mode_prompts") or {}
-    tpl = mode_prompts.get(mode_key)
+        if editorial_sys and tpl:
+            sys_prompt = editorial_sys
+            # SAFE replacement: no .format() so '%' and other chars can't break it.
+            try:
+                user_content = tpl.replace("{article}", article)
+            except Exception:
+                user_content = tpl + "\n\nARTICLE:\n" + article
 
-    if editorial_sys and tpl:
-        sys_prompt = editorial_sys
-        try:
-            user_content = tpl.format(article=article)
-        except Exception:
-            # Fail-safe if formatting breaks.
-            user_content = f"{tpl}\n\nARTICLE:\n{article}"
-    else:
-        # Very light generic system prompt, if nothing is configured.
-        if mode_key == "A":
-            sys_prompt = (
-                "You are a neutral news editor. "
-                "Write one concise lede sentence based only on ARTICLE."
-            )
-        elif mode_key == "B":
-            sys_prompt = (
-                "You are a neutral news writer. "
-                "Write a 2–3 sentence factual brief based only on ARTICLE."
-            )
-        else:
-            sys_prompt = (
-                "You are a neutral news editor. "
-                "Write three concise factual bullet headlines from ARTICLE."
-            )
+    # Fallback if YAML prompts not available
+    if not sys_prompt:
+        m = MODE_PRESETS.get(mode_key, MODE_PRESETS["A"])
+        sys_prompt = m["sys"].strip()
+        user_content = article
 
     messages = [
         {"role": "system", "content": sys_prompt},
@@ -235,13 +231,11 @@ def _build_chat_ids(
         return_tensors="pt",
     ).to(device)
 
-    # Attention mask
     if tok.pad_token_id is not None:
         attention_mask = (ids != tok.pad_token_id).long()
     else:
         attention_mask = torch.ones_like(ids)
 
-    # Context truncation
     if ids.shape[1] > max_ctx:
         ids = ids[:, -max_ctx:]
         attention_mask = attention_mask[:, -max_ctx:]
@@ -257,9 +251,10 @@ def _build_raw_ids(
     device: torch.device,
 ) -> Tuple[torch.Tensor, torch.Tensor, int]:
     """
-    Raw token IDs without roles. Used only by generate_natural_text.
+    Build raw token IDs without chat roles (for natural continuation).
+    Used only by generate_natural_text for debugging.
     """
-    article = (user_text or "").strip()
+    article = user_text.strip()
     enc = tok(
         article,
         return_tensors="pt",
@@ -280,213 +275,70 @@ def _build_raw_ids(
 
 
 # ============================================================
-# PRE / POST-PROCESSING
+# CLEANUP HELPERS
 # ============================================================
 
 def _strip_preamble(text: str) -> str:
     """
     Remove obvious instruction-style preambles the model sometimes echoes.
-    We keep this deliberately conservative.
     """
-    t = (text or "").strip()
-    if not t:
-        return t
+    text = text.strip()
+    if not text:
+        return text
 
-    # Drop "Today Date: ..." if it appears.
-    t = re.sub(
+    text = re.sub(
         r"^[^A-Za-z]*today date:[^.]*\.\s*",
         "",
-        t,
+        text,
         flags=re.IGNORECASE,
     ).strip()
 
-    # Remove fragments of our own instructions if echoed.
     leak_phrases = [
+        "write a neutral 2–3 sentence news brief",
+        "maximum 80 words) based only on what the user writes",
+        "do not invent extra facts, names, locations, dates or numbers",
         "you are a newsroom writer",
         "you are a neutral news editor",
-        "write a neutral 2–3 sentence news brief",
-        "do not invent extra facts",
+        "write one concise sentence (maximum 20 words)",
+        "write exactly three bullet-point headlines",
     ]
-    low = t.lower()
+    low = text.lower()
     cut_idx = 0
     for phrase in leak_phrases:
-        idx = low.find(phrase)
+        idx = low.find(phrase.lower())
         if idx != -1:
             end = low.find(".", idx)
             if end != -1:
                 cut_idx = max(cut_idx, end + 1)
 
     if cut_idx:
-        t = t[cut_idx:].lstrip()
+        text = text[cut_idx:].lstrip()
 
-    return t.strip()
+    text = re.sub(r"assistant\.?\s*$", "", text, flags=re.IGNORECASE).strip()
+    return " ".join(text.split()).strip()
 
 
 def _remove_labels(text: str) -> str:
     """
-    Remove technical labels like HEADLINE:, LEDE:, BULLETS: that the prompts
-    ask the model to include. We keep only the actual content.
+    Remove technical labels like HEADLINE:/LEDE:/BULLETS: if the model emits them.
     """
-    if not text:
-        return text
+    lines = []
+    pattern = re.compile(
+        r"^\s*(HEADLINE|LEDE|BULLETS?)\s*[:：]\s*",
+        flags=re.IGNORECASE,
+    )
 
-    replacements = [
-        (r"\bHEADLINE\s*[:：]\s*", ""),
-        (r"\bLEDE\s*[:：]\s*", ""),
-        (r"\bBULLETS?\s*[:：]\s*", ""),
-    ]
-    result = text
-    for pattern, repl in replacements:
-        result = re.sub(pattern, repl, result, flags=re.IGNORECASE)
-    return result
+    for raw in text.splitlines():
+        line = raw.rstrip()
+        cleaned = pattern.sub("", line)
+        if cleaned.strip():
+            lines.append(cleaned)
 
-
-def _quick_brief_from_article(article: str, max_sentences: int = 3) -> str:
-    """
-    Fallback: build a 2–3 sentence brief directly from ARTICLE text.
-    """
-    s = (article or "").strip()
-    if not s:
-        return "Update pending."
-
-    sentences = re.split(r"(?<=[.!?])\s+", s)
-    sentences = [x.strip() for x in sentences if x.strip()]
-    if not sentences:
-        return "Update pending."
-
-    brief = " ".join(sentences[:max_sentences])
-
-    # Ensure final punctuation.
-    if not brief.endswith((".", "!", "?")):
-        brief += "."
-
-    return brief
-
-
-def _postprocess_output(mode: str, text: str, user_text: str) -> str:
-    """
-    Final shaping / cleanup of model output for modes A, B, C.
-    """
-    mode = (mode or "B").upper()
-    raw = (text or "").strip()
-    article = (user_text or "").strip()
-
-    # 1) Light generic cleanup.
-    t = _strip_preamble(raw)
-    t = _remove_labels(t)
-
-    # Remove simple "User:" / "Assistant:" prefixes at start of lines.
-    t = re.sub(
-        r"(?mi)^(User|Assistant)\s*[:>]\s*",
-        "",
-        t,
-    ).strip()
-
-    if not t:
-        # Completely cleaned away -> fall back to ARTICLE.
-        t = article
-
-    # Helper for sentence splitting.
-    def _sentences(s: str):
-        parts = re.split(r"(?<=[.!?])\s+", s)
-        return [x.strip() for x in parts if x.strip()]
-
-    # ---------- Mode A: one-sentence lede ----------
-    if mode == "A":
-        sents = _sentences(t)
-        if not sents:
-            sents = _sentences(article)
-
-        if not sents:
-            return "Update pending."
-
-        first = sents[0]
-        words = first.split()
-        if len(words) > 20:
-            first = " ".join(words[:20]) + "…"
-        if not first.endswith((".", "!", "?")):
-            first += "."
-        return first
-
-    # ---------- Mode B: 2–3 sentence brief ----------
-    if mode == "B":
-        # If model output is extremely short or degenerate (like "LEDE."),
-        # ignore it and build directly from the ARTICLE.
-        normalized = t.lower().strip()
-        if (
-            len(t.split()) < 6
-            or normalized in {"lede", "lede.", "headline", "headline."}
-            or normalized.startswith("lede ")
-        ):
-            return _quick_brief_from_article(article, max_sentences=3)
-
-        # Otherwise, try to build a brief from model output.
-        sents = _sentences(t)
-        if not sents:
-            return _quick_brief_from_article(article, max_sentences=3)
-
-        brief = " ".join(sents[:3])
-        if not brief.endswith((".", "!", "?")):
-            brief += "."
-        return brief
-
-    # ---------- Mode C: three bullet headlines ----------
-    if mode == "C":
-        # Collect candidate lines from model output.
-        lines = []
-        for line in t.splitlines():
-            line = line.strip()
-            if not line:
-                continue
-            # strip bullet symbols
-            line = line.lstrip("-•*").strip()
-            if len(line.split()) < 3:
-                continue
-            lines.append(line)
-
-        # If we didn't get good lines from the output, fall back to article.
-        if not lines:
-            article_sents = _sentences(article)
-            for s in article_sents[:3]:
-                lines.append(s)
-
-        # Deduplicate while preserving order.
-        seen = set()
-        uniq = []
-        for l in lines:
-            key = " ".join(l.lower().split())
-            if not key or key in seen:
-                continue
-            seen.add(key)
-            uniq.append(l)
-
-        def trim_headline(h: str, min_w: int = 5, max_w: int = 9) -> str:
-            words = h.split()
-            if len(words) > max_w:
-                return " ".join(words[:max_w]) + "…"
-            if len(words) < min_w:
-                return h
-            return h
-
-        bullets = []
-        for h in uniq:
-            bullets.append(trim_headline(h))
-            if len(bullets) == 3:
-                break
-
-        if not bullets:
-            bullets = ["Update pending"] * 3
-        while len(bullets) < 3:
-            bullets.append(bullets[-1])
-
-        return "\n".join(f"• {b}" for b in bullets)
-
-    # ---------- Fallback ----------
-    return t
+    return "\n".join(lines).strip()
 
 
 # ============================================================
-# NATURAL CONTINUATION (DEBUG)
+# NATURAL (RAW) GENERATION – DEBUG ONLY
 # ============================================================
 
 def generate_natural_text(
@@ -500,6 +352,9 @@ def generate_natural_text(
 ) -> str:
     """
     Natural continuation (no system roles) – mainly for debugging.
+
+    Use this when you want to inspect how the base+LoRA model behaves
+    WITHOUT mode prompts or post-processing.
     """
     if not prompt or not prompt.strip():
         raise ValueError("Empty prompt")
@@ -554,7 +409,84 @@ def generate_natural_text(
 
 
 # ============================================================
-# TOP-LEVEL GENERATION ENTRY POINT
+# LIGHT POST-PROCESSING (NO REWRITES)
+# ============================================================
+
+def _postprocess_output(mode: str, text: str, user_text: str) -> str:
+    """
+    Final shaping / cleanup of model output for modes A, B, C.
+
+    - Never reconstructs from ARTICLE.
+    - Only removes obvious junk / labels and lightly enforces shape.
+    """
+    mode = (mode or "B").upper()
+    raw_text = (text or "").strip()
+    article = (user_text or "").strip()
+
+    cleaned = _strip_preamble(raw_text)
+    cleaned = _remove_labels(cleaned)
+
+    if not cleaned:
+        cleaned = raw_text
+
+    cleaned = cleaned.strip()
+    if not cleaned:
+        return article or ""
+
+    # Mode A: lede (single sentence, ~≤20 words)
+    if mode == "A":
+        sentences = re.split(r'(?<=[.!?])\s+', cleaned)
+        sentences = [s.strip() for s in sentences if s.strip()]
+        first = sentences[0] if sentences else cleaned
+
+        words = first.split()
+        if len(words) > 20:
+            first = " ".join(words[:20]) + "…"
+        if not first.endswith((".", "!", "?")):
+            first += "."
+        return first
+
+    # Mode B: brief – keep as-is, ensure it ends with punctuation
+    if mode == "B":
+        brief = cleaned
+        if len(brief.split()) < 4:
+            return brief
+        if not brief.endswith((".", "!", "?")):
+            brief += "."
+        return brief
+
+    # Mode C: bullet headlines – keep model bullets, normalize format
+    if mode == "C":
+        lines = [ln.strip() for ln in cleaned.splitlines() if ln.strip()]
+
+        if len(lines) == 1 and ("•" in lines[0] or "-" in lines[0]):
+            parts = re.split(r"[•\-]\s*", lines[0])
+            lines = [p.strip() for p in parts if p.strip()]
+
+        bullets = []
+        for ln in lines:
+            ln = ln.lstrip("-•*").strip()
+            if not ln:
+                continue
+            bullets.append(ln)
+
+        if not bullets:
+            return cleaned
+
+        final = []
+        for b in bullets:
+            words = b.split()
+            if len(words) > 12:
+                b = " ".join(words[:12]) + "…"
+            final.append(f"• {b}")
+
+        return "\n".join(final)
+
+    return cleaned
+
+
+# ============================================================
+# MAIN GENERATION ENTRYPOINT
 # ============================================================
 
 def generate_text(
@@ -564,12 +496,11 @@ def generate_text(
     override_params: Optional[Dict[str, Any]] = None,
 ) -> str:
     """
-    High-level helper used by the Flask console.
+    High-level helper to generate newsroom-style text using configured model.
 
-    - Reads YAML config
-    - Uses MODE_PRESETS for decoding params (overridable from UI)
-    - Builds chat-style prompt with editorial system + mode_prompts
-    - Applies light post-processing and strong fallbacks.
+    To tweak without touching code:
+      - Edit system_prompt_editorial + mode_prompts in YAML.
+      - Or edit MODE_PRESETS for fallback behaviour.
     """
     if not prompt or not prompt.strip():
         raise ValueError("Empty prompt")
@@ -585,7 +516,6 @@ def generate_text(
     preset = MODE_PRESETS.get(mode, MODE_PRESETS["B"])
     base_params = preset["params"].copy()
 
-    # Allow per-call overrides (UI sliders).
     if override_params:
         base_params.update(override_params)
 
@@ -624,12 +554,10 @@ def generate_text(
             )
 
     gen_ids = out[0, input_len:]
-    raw_text = tok.decode(gen_ids, skip_special_tokens=True).strip()
+    text = tok.decode(gen_ids, skip_special_tokens=True).strip()
 
-    if not raw_text:
+    if not text:
         full = tok.decode(out[0], skip_special_tokens=True)
-        raw_text = full[-400:].strip()
+        text = full[-400:].strip()
 
-    final_text = _postprocess_output(mode, raw_text, prompt)
-
-    return final_text
+    return _postprocess_output(mode, text, prompt)

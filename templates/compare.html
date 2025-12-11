@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Newsroom LLM – Base vs LoRA Comparison</title>
+  <style>
+    body { font-family: sans-serif; margin: 16px; }
+    textarea { width: 100%; min-height: 120px; }
+    .row { display: flex; gap: 12px; margin-top: 12px; }
+    .col { flex: 1; }
+    .output-box {
+      border: 1px solid #ccc;
+      padding: 8px;
+      min-height: 160px;
+      white-space: pre-wrap;
+      background: #fafafa;
+    }
+    .error { color: #b00020; margin-top: 8px; }
+    .label-inline { margin-right: 16px; }
+  </style>
+</head>
+<body>
+  <h1>Newsroom LLM – Base vs Fine-tuned (LoRA)</h1>
+
+  <form method="post" action="{{ url_for('compare') }}">
+    <label>Instruction:</label><br>
+    <textarea name="instruction" placeholder="e.g. Rewrite this into clear AJ-style news prose, preserving all facts.">{{ instruction or '' }}</textarea>
+
+    <br><br>
+    <label>Text to process:</label><br>
+    <textarea name="text" placeholder="Paste the article / note / press release here...">{{ text or '' }}</textarea>
+
+    <br><br>
+    <label class="label-inline">
+      <input type="checkbox" name="run_base" checked> Run Base Model
+    </label>
+    <label class="label-inline">
+      <input type="checkbox" name="run_lora" checked> Run Fine-tuned (LoRA)
+    </label>
+
+    <br><br>
+    <button type="submit">Compare</button>
+  </form>
+
+  {% if error_message %}
+    <div class="error">{{ error_message }}</div>
+  {% endif %}
+
+  {% if base_output or lora_output %}
+    <hr>
+    <h2>Results</h2>
+    <div class="row">
+      <div class="col">
+        <h3>Base Model Output</h3>
+        <div class="output-box">
+          {{ base_output or '—' }}
+        </div>
+      </div>
+      <div class="col">
+        <h3>Fine-tuned (LoRA) Output</h3>
+        <div class="output-box">
+          {{ lora_output or '—' }}
+        </div>
+      </div>
+    </div>
+  {% endif %}
+</body>
+</html>

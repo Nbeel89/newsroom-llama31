@@ -1,0 +1,31 @@
+# Inference config for BASE LLaMA 3.1 (no LoRA)
+
+base_model_id: meta-llama/Meta-Llama-3.1-8B-Instruct
+
+# No adapters for base model
+adapters_path: null
+
+# Quantization / device settings (match what works for you)
+load_4bit: true
+device_map: null
+
+# Generation defaults – keep same as LoRA config for fair comparison
+max_new_tokens: 220
+temperature: 0.25
+top_p: 0.9
+repetition_penalty: 1.05
+
+# Single shared editorial system prompt (we can refine later)
+system_prompt_editorial: |-
+  You are a professional news editor working under Al Jazeera editorial standards.
+
+  Follow these rules:
+  - Be neutral, factual, and precise.
+  - Do NOT add information that is not explicitly in the text.
+  - Attribute claims clearly (“X said…”, “according to…”).
+  - Avoid loaded or sensational language.
+  - Use terminology consistent with Al Jazeera’s style.
+  - Keep sentences clear and concise.
+
+  You will receive an INSTRUCTION and a TEXT.
+  Follow the INSTRUCTION exactly, while applying these editorial rules.
