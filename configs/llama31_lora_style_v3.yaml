@@ -1,0 +1,26 @@
+# LoRA v3 — AJ style learning (rewrite target)
+base_model_id: meta-llama/Meta-Llama-3.1-8B-Instruct
+
+dataset_path: data/cleaned/aj_style_sft_v3.jsonl
+output_dir: outputs/llama31_lora_v3
+
+# Reduce context length to save memory
+max_seq_len: 512   # was 1024
+
+load_4bit: true    # we still *try* 4-bit, but will fall back if needed
+
+lora_r: 16         # was 32 — smaller rank = less memory
+lora_alpha: 32     # was 64
+lora_dropout: 0.05
+target_modules: [q_proj, k_proj, v_proj, o_proj, up_proj, down_proj, gate_proj]
+
+batch_size: 1
+gradient_accumulation_steps: 8
+num_epochs: 1      # 1 epoch is enough for test run
+
+learning_rate: 2e-4
+warmup_steps: 50
+weight_decay: 0.0
+
+save_steps: 200
+logging_steps: 20

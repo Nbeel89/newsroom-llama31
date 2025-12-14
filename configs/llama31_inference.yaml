@@ -3,7 +3,7 @@
 base_model_id: meta-llama/Meta-Llama-3.1-8B-Instruct
 
 # IMPORTANT: point to your best LoRA v2 checkpoint
-adapters_path: outputs/llama31_lora_v2/checkpoint-200
+adapters_path: outputs/llama31_lora_v3
 
 # This is effectively ignored in your utils 4-bit path, but we keep it for completeness
 device_map: null
