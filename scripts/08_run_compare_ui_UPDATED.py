@@ -303,7 +303,7 @@ DARK_TEMPLATE = r"""
 </head>
 <body>
   <div class="wrap">
-    <div class="title">📰 Newsroom LLM – Compare</div>
+    <div class="title">Newsroom LLM – Compare</div>
     <div class="subtitle">Compare Base vs LoRA outputs (same prompts, same inputs).</div>
 
     <div class="pill">LoRA Adapter: <code>{{ adapters_path }}</code></div>
